@@ -36,3 +36,8 @@ externalPort = 80
 [[ports]]
 localPort = 37267
 externalPort = 3000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd js-peer && npm start"]
+build = ["bash", "-c", "cd js-peer && npm run build"]
