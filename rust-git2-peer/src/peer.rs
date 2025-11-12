@@ -973,7 +973,7 @@ impl Peer {
                                                             Ok(GitResponse::Error("Status not yet implemented".to_string()))
                                                         },
                                                     };
-                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
+                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response?) {
                                                         error!("Failed to send GitResponse: {:?}", e);
                                                     }
                                                 }
