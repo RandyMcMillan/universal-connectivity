@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use tokio::{fs, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
+use rust_libp2p_webrtc_peer::util::is_valid_git_commit_hash;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -25,10 +26,32 @@ async fn main() -> Result<()> {
     let webrtc_cert = read_or_create_certificate(&opt.local_cert_path).await?;
 
     // create the ui and the channels to communicate with it
+    let git_commit_message = if let Some(topic) = &opt.topic {
+        if is_valid_git_commit_hash(topic) {
+            let output = tokio::process::Command::new("git")
+                .arg("show")
+                .arg("-s")
+                .arg("--format=%B")
+                .arg(topic)
+                .output()
+                .await?;
+            if output.status.success() {
+                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            } else {
+                info!("Failed to get git commit message for topic: {}", topic);
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let (mut ui, to_ui, from_ui) = if opt.headless {
         Headless::build(local_key.public().into(), from_log, shutdown.clone())
     } else {
-        Tui::build(local_key.public().into(), from_log, shutdown.clone(), opt.topic)
+        Tui::build(local_key.public().into(), from_log, shutdown.clone(), opt.topic, git_commit_message)
     };
 
     // create the peer, connecting it to the ui

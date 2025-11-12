@@ -52,6 +52,7 @@ impl Tui {
         from_log: Receiver<LogMessage>,
         shutdown: CancellationToken,
         topic: Option<String>,
+        git_commit_message: Option<String>,
     ) -> (Box<dyn Ui + Send>, Sender<Message>, Receiver<Message>) {
         // create a new channels for sending/receiving messages
         let (to_peer, from_ui) = mpsc::channel::<Message>(64);
@@ -92,7 +93,7 @@ impl Ui for Tui {
         let mut system_events_widget = LinesWidget::new("System Events", 100);
 
         // Chat Widget
-        let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone());
+        let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone(), git_commit_message);
 
         // Main loop
         loop {
@@ -464,11 +465,12 @@ struct ChatWidget<'a> {
     input: String,
     mode: InputMode,
     topic: Option<String>,
+    git_commit_message: Option<String>,
 }
 
 impl<'a> ChatWidget<'a> {
     // Create a new ChatWidget instance
-    fn new(me: &'a ChatPeer, topic: Option<String>) -> Self {
+    fn new(me: &'a ChatPeer, topic: Option<String>, git_commit_message: Option<String>) -> Self {
         let mut peers = HashSet::new();
         peers.insert(*me);
 
@@ -479,6 +481,7 @@ impl<'a> ChatWidget<'a> {
             input: String::new(),
             mode: InputMode::Chat,
             topic,
+            git_commit_message,
         }
     }
 
@@ -504,9 +507,15 @@ impl Widget for &mut ChatWidget<'_> {
 
         let git_topic_header = self.topic.as_ref().and_then(|topic| {
             if is_valid_git_commit_hash(topic) {
-                topic_line_height = 1;
+                let header_text = format!("Git Topic: {}", topic);
+                let mut full_message = header_text.clone();
+                if let Some(commit_msg) = &self.git_commit_message {
+                    full_message.push_str(&format!("\n\n{}", commit_msg));
+                }
+                let wrapped_lines = wrap_text(&full_message, area.width as usize - 2);
+                topic_line_height = wrapped_lines.len() as u16 + 2; // +2 for borders
                 constraints.insert(0, Constraint::Length(topic_line_height));
-                Some(Paragraph::new(format!("Git Topic: {}", topic)).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
+                Some(Paragraph::new(wrapped_lines).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
             } else {
                 None
             }
