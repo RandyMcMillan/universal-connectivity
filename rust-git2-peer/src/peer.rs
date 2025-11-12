@@ -959,10 +959,7 @@ impl Peer {
                                                                         Err(e) => Ok(GitResponse::Error(format!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e)))
                                                                     }
                                                                 }
-                                                                Err(e) => {
-                                                                    error!("Failed to open repository at {:?}: {}", repo_path, e);
-                                                                    GitResponse::Error(format!("Failed to open repository: {}", e))
-                                                                }
+                                                                Err(e) => Ok(GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)))
                                                             }
                                                         },
                                                         GitRequest::Push(remote, refspecs) => {
