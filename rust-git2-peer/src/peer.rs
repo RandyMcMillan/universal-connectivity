@@ -963,13 +963,14 @@ impl Peer {
                                                             }
                                                         },
                                                         GitRequest::Push(remote, refspecs) => {
-                                                            GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs))
+                                                            Ok(GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs)))
+
                                                         },
                                                         GitRequest::LsRemote(remote) => {
-                                                            GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote))
+                                                            Ok(GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote)))
                                                         },
                                                         GitRequest::Status => {
-                                                            GitResponse::Error("Status not yet implemented".to_string())
+                                                            Ok(GitResponse::Error("Status not yet implemented".to_string()))
                                                         },
                                                     };
                                                     if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
