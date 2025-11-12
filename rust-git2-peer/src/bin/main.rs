@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let (mut ui, to_ui, from_ui) = if opt.headless {
         Headless::build(local_key.public().into(), from_log, shutdown.clone())
     } else {
-        Tui::build(local_key.public().into(), from_log, shutdown.clone())
+        Tui::build(local_key.public().into(), from_log, shutdown.clone(), opt.topic)
     };
 
     // create the peer, connecting it to the ui

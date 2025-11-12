@@ -27,6 +27,7 @@ use std::{
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
+use crate::util::is_valid_git_commit_hash;
 
 /// A simple UI for the peer
 pub struct Tui {
@@ -40,6 +41,8 @@ pub struct Tui {
     from_peer: Receiver<Message>,
     // the shutdown token
     shutdown: CancellationToken,
+    // the gossipsub topic
+    topic: Option<String>,
 }
 
 impl Tui {
@@ -48,6 +51,7 @@ impl Tui {
         me: PeerId,
         from_log: Receiver<LogMessage>,
         shutdown: CancellationToken,
+        topic: Option<String>,
     ) -> (Box<dyn Ui + Send>, Sender<Message>, Receiver<Message>) {
         // create a new channels for sending/receiving messages
         let (to_peer, from_ui) = mpsc::channel::<Message>(64);
@@ -60,6 +64,7 @@ impl Tui {
             to_peer,
             from_peer,
             shutdown,
+            topic,
         });
 
         (ui, to_ui, from_ui)
@@ -84,7 +89,7 @@ impl Ui for Tui {
         let mut log_widget = LinesWidget::new("Log", 200);
 
         // Chat Widget
-        let mut chat_widget = ChatWidget::new(&self.me);
+        let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone());
 
         // Main loop
         loop {
@@ -449,11 +454,12 @@ struct ChatWidget<'a> {
     events: LinesWidget,
     input: String,
     mode: InputMode,
+    topic: Option<String>,
 }
 
 impl<'a> ChatWidget<'a> {
     // Create a new ChatWidget instance
-    fn new(me: &'a ChatPeer) -> Self {
+    fn new(me: &'a ChatPeer, topic: Option<String>) -> Self {
         let mut peers = HashSet::new();
         peers.insert(*me);
 
@@ -464,6 +470,7 @@ impl<'a> ChatWidget<'a> {
             events: LinesWidget::new("System", 100),
             input: String::new(),
             mode: InputMode::Chat,
+            topic,
         }
     }
 
@@ -486,28 +493,43 @@ impl<'a> ChatWidget<'a> {
 
 impl Widget for &mut ChatWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Renders a layout with three rows, the top row is 50% of the height, the middle row is
-        // 50% of the height and the bottom row is 1 line hight. The top row contains two columns,
-        // the second column is 18 characters wide and the first column fills the remaining space.
-        // The second row contains the LogWidget showing event messages. The bottom row is a chat
-        // input line that starts with "> ".
+        let mut constraints = vec![
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+            Constraint::Length(1),
+        ];
+        let mut topic_line_height = 0;
+
+        let git_topic_header = self.topic.as_ref().and_then(|topic| {
+            if is_valid_git_commit_hash(topic) {
+                topic_line_height = 1;
+                constraints.insert(0, Constraint::Length(topic_line_height));
+                Some(Paragraph::new(format!("Git Topic: {}", topic)).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
+            } else {
+                None
+            }
+        });
+
+        let layout_constraints: &[Constraint] = constraints.as_ref();
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
-                [
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                    Constraint::Length(1),
-                ]
-                .as_ref(),
+                layout_constraints
             )
             .split(area);
+
+        let mut current_layout_index = 0;
+
+        if let Some(header) = git_topic_header {
+            header.render(layout[current_layout_index], buf);
+            current_layout_index += 1;
+        }
 
         // calculate the layout for the top row
         let top_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(100), Constraint::Length(24)].as_ref())
-            .split(layout[0]);
+            .split(layout[current_layout_index]);
 
         // render the chat messages
         self.chat.render(top_layout[0], buf);
@@ -536,7 +558,7 @@ impl Widget for &mut ChatWidget<'_> {
             .render(top_layout[1], buf);
 
         // render the events messages
-        self.events.render(layout[1], buf);
+        self.events.render(layout[current_layout_index + 1], buf);
 
         // render the chat input
         let prompt = match self.mode {
@@ -544,6 +566,6 @@ impl Widget for &mut ChatWidget<'_> {
             InputMode::Git => "git >".to_string(),
             InputMode::Command => "cmd >".to_string(),
         };
-        Paragraph::new(format!("{} {}", prompt, self.input.clone())).render(layout[2], buf);
+        Paragraph::new(format!("{} {}", prompt, self.input.clone())).render(layout[current_layout_index + 2], buf);
     }
 }
