@@ -1,7 +1,7 @@
 use crate::{
     decode_unknown_protobuf, ipaddr_to_multiaddr, is_private_ip, pretty_print_fields,
     proto::Peer as DiscoveredPeer, split_peer_id, ChatPeer, Codec as FileExchangeCodec, Message,
-    Options, Request as FileRequest,
+    Options,
 };
 use crate::git_exchange::{Codec as GitExchangeCodec, GitRequest, GitResponse};
 use clap::Parser;
@@ -610,18 +610,18 @@ impl Peer {
                                         self.to_ui.send(Message::AddPeer(peer)).await?;
                                     }
                                 }
-                                UniversalConnectivityMessage::File { from, data, .. } => {
-                                    let file_id = String::from_utf8(data)?;
-                                    if let Some(peer) = from {
-                                        self.swarm.behaviour_mut().request_response.send_request(
-                                            &peer.into(),
-                                            FileRequest {
-                                                file_id: file_id.clone(),
-                                            },
-                                        );
-                                        self.msg(format!("Sent file request to {peer} for {file_id}")).await?;
-                                    }
-                                }
+                                // UniversalConnectivityMessage::File { from, data, .. } => {
+                                //     let file_id = String::from_utf8(data)?;
+                                //     if let Some(peer) = from {
+                                //         self.swarm.behaviour_mut().request_response.send_request(
+                                //             &peer.into(),
+                                //             FileRequest {
+                                //                 file_id: file_id.clone(),
+                                //             },
+                                //         );
+                                //         self.msg(format!("Sent file request to {peer} for {file_id}")).await?;
+                                //     }
+                                // }
                                 UniversalConnectivityMessage::PeerDiscovery { discovered_peer, discovered_addrs, .. } => {
                                     let mut msg = discovered_peer
                                         .map_or("\tDialing: Unknown".to_string(), |discovered_peer| {
@@ -895,9 +895,9 @@ impl Peer {
 
                     // When we receive a request_response event
                     SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => match event {
-                                            RequestResponseEvent::Message { message, peer_id } => match message {
-                                                RequestResponseMessage::Request { request, .. } => {
-                                                    debug!("Received GitRequest from {}: {:?}", peer_id, request);
+                                            RequestResponseEvent::Message { message, peer, connection_id } => match message {
+                                                RequestResponseMessage::Request { request, channel, .. } => {
+                                                    debug!("Received GitRequest from {}: {:?}", peer, request);
                                                     let response = match request {
                                                         GitRequest::Clone(repo_url) => {
                                                             // Define a directory to clone repositories into. For now, use a subdirectory.
@@ -980,7 +980,7 @@ impl Peer {
                                                             GitResponse::Error("Status not yet implemented".to_string())
                                                         },
                                                     };
-                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(peer_id, response) {
+                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
                                                         error!("Failed to send GitResponse: {}", e);
                                                     }
                                                 }
