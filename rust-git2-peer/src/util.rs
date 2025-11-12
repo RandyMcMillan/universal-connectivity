@@ -187,3 +187,30 @@ pub fn ipaddr_to_multiaddr(ip: &IpAddr) -> Multiaddr {
     };
     multiaddr
 }
+
+/// Checks if a string consists only of hexadecimal characters.
+fn is_hexadecimal(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Checks if a string is a valid Git commit hash (40 hexadecimal characters).
+pub fn is_valid_git_commit_hash(s: &str) -> bool {
+    s.len() == 40 && is_hexadecimal(s)
+}
+
+/// Checks if a string is a valid SHA256 hash (64 hexadecimal characters).
+pub fn is_valid_sha256_hash(s: &str) -> bool {
+    s.len() == 64 && is_hexadecimal(s)
+}
+
+/// Validates if a string is either a valid Git commit hash or a valid SHA256 hash.
+pub fn validate_topic_hash(s: &str) -> Result<String, String> {
+    if is_valid_git_commit_hash(s) || is_valid_sha256_hash(s) {
+        Ok(s.to_string())
+    } else {
+        Err(format!(
+            "Invalid topic: '{}' is neither a valid Git commit hash (40 hex chars) nor a valid SHA256 hash (64 hex chars).",
+            s
+        ))
+    }
+}

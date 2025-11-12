@@ -58,6 +58,6 @@ pub struct Options {
     pub relay_server: bool,
 
     /// If set, overrides the default gossipsub topic (which is the git commit HEAD).
-    #[clap(long, env)]
+    #[clap(long, env, value_parser = crate::util::validate_topic_hash)]
     pub topic: Option<String>,
 }
