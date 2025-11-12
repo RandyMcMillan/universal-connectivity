@@ -56,4 +56,8 @@ pub struct Options {
     /// If set the peer will act as a relay server
     #[clap(long, env)]
     pub relay_server: bool,
+
+    /// If set, overrides the default gossipsub topic (which is the git commit HEAD).
+    #[clap(long, env)]
+    pub topic: Option<String>,
 }

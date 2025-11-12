@@ -157,28 +157,37 @@ impl Peer {
         // parse the command line arguments
         let opt = Options::parse();
 
-        let mut chat_topic_name = "universal-connectivity".to_string();
+        let mut chat_topic_name = if let Some(topic) = opt.topic {
+            info!("Using custom topic: {}", topic);
+            to_ui.send(Message::Event(format!("Using custom topic: {}", topic))).await?;
+            topic
+        } else {
+            "universal-connectivity".to_string()
+        };
+
         // Check if we are in a git repository
-        match Repository::discover(".") {
-            Ok(repo) => {
-                info!("Detected git repository at: {:?}", repo.path());
-                to_ui.send(Message::Event(format!("Detected git repository at: {:?}", repo.path()))).await?;
-                match repo.head() {
-                    Ok(head) => {
-                        if let Some(oid) = head.target() {
-                            chat_topic_name = oid.to_string();
-                            to_ui.send(Message::Event(format!("Using git HEAD as chat topic: {}", chat_topic_name))).await?;
+        if opt.topic.is_none() {
+            match Repository::discover(".") {
+                Ok(repo) => {
+                    info!("Detected git repository at: {:?}", repo.path());
+                    to_ui.send(Message::Event(format!("Detected git repository at: {:?}", repo.path()))).await?;
+                    match repo.head() {
+                        Ok(head) => {
+                            if let Some(oid) = head.target() {
+                                chat_topic_name = oid.to_string();
+                                to_ui.send(Message::Event(format!("Using git HEAD as chat topic: {}", chat_topic_name))).await?;
+                            }
+                        },
+                        Err(e) => {
+                            info!("Could not get git HEAD: {}", e);
+                            to_ui.send(Message::Event(format!("Could not get git HEAD: {}", e))).await?;
                         }
-                    },
-                    Err(e) => {
-                        info!("Could not get git HEAD: {}", e);
-                        to_ui.send(Message::Event(format!("Could not get git HEAD: {}", e))).await?;
                     }
+                },
+                Err(e) => {
+                    info!("Not in a git repository: {}", e);
+                    to_ui.send(Message::Event(format!("Not in a git repository: {}", e))).await?;
                 }
-            },
-            Err(e) => {
-                info!("Not in a git repository: {}", e);
-                to_ui.send(Message::Event(format!("Not in a git repository: {}", e))).await?;
             }
         }
 
