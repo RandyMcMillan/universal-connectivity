@@ -3,12 +3,14 @@ use crate::{
     proto::Peer as DiscoveredPeer, split_peer_id, ChatPeer, Codec as FileExchangeCodec, Message,
     Options, Request as FileRequest,
 };
+use crate::git_exchange::{Codec as GitExchangeCodec, GitRequest, GitResponse};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
     autonat::{
         v2::client::{
-            Behaviour as AutonatClient, Config as AutonatClientConfig, Event as AutonatClientEvent,
+            Behaviour as AutonatClient, Config as AutonatClientConfig,
+ Event as AutonatClientEvent,
         },
         v2::server::{Behaviour as AutonatServer, Event as AutonatServerEvent},
     },
@@ -50,10 +52,14 @@ use std::{
     fmt::{self, Write},
     hash::{Hash, Hasher},
     time::Duration,
+    path::PathBuf,
+    fs,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
+use git2::build::RepoBuilder;
+use git2::{Repository, Remote};
 
 // Universal connectivity agent string
 const UNIVERSAL_CONNECTIVITY_AGENT: &str = "universal-connectivity/0.1.0";
@@ -61,8 +67,10 @@ const UNIVERSAL_CONNECTIVITY_AGENT: &str = "universal-connectivity/0.1.0";
 // Protocol Names
 const IPFS_KADEMLIA_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 const IPFS_IDENTIFY_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
-const FILE_EXCHANGE_PROTOCOL_NAME: StreamProtocol =
+const FILE_EXCHANGE_PROTOCOL_NAME: StreamProtocol = 
     StreamProtocol::new("/universal-connectivity-file/1");
+
+const GIT_EXCHANGE_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/universal-connectivity-git/1");
 
 // Gossipsub Topics
 const GOSSIPSUB_CHAT_TOPIC: &str = "universal-connectivity";
@@ -96,8 +104,9 @@ struct Behaviour {
     memory_connection_limits: MemoryConnectionLimits,
     relay_client: Toggle<RelayClient>,
     relay_server: Toggle<RelayServer>,
-    request_response: RequestResponse<FileExchangeCodec>,
+    request_response: RequestResponse<GitExchangeCodec>,
 }
+
 
 // The rust-peer implementation is full featured and supports a number of protocols and transports
 // to make it maximally compatible will all other universal connectivity peers
@@ -294,7 +303,7 @@ impl Peer {
             // Create the RequestResponse behaviour
             let request_response = {
                 let cfg = RequestResponseConfig::default();
-                RequestResponse::new([(FILE_EXCHANGE_PROTOCOL_NAME, ProtocolSupport::Full)], cfg)
+                RequestResponse::new([(GIT_EXCHANGE_PROTOCOL_NAME, ProtocolSupport::Full)], cfg)
             };
 
             // Initialize the overall peer behaviour
@@ -519,7 +528,7 @@ impl Peer {
                     break;
                 }
 
-                _ = tick.tick() => {}
+                _ = tick.tick() => {} // tick.tick() returns immediately
 
                 Some(event) = self.swarm.next() => match event {
 
@@ -631,7 +640,7 @@ impl Peer {
                                         self.to_ui.send(Message::AddPeer(peer)).await?;
                                     }
                                 }
-                                _ => {}
+                                _ => {} // Ignore other message types for now
                             }
                         }
                         GossipsubEvent::Subscribed { peer_id, topic } => {
@@ -749,8 +758,7 @@ impl Peer {
                                             /*
                                             } else {
                                                 self.msg(format!("Kademlia getting closest peers: {}", peers.len())).await?;
-                                            }
-                                            */
+                                            }                                            */
                                         }
                                         Err(e) => {
                                             self.get_closest_peers_query_id.remove(&id);
@@ -781,8 +789,7 @@ impl Peer {
                                                 } else {
                                                     self.get_providers_query_id = None;
                                                     self.msg(format!("Kademlia found getting providers: {}", providers.len())).await?;
-                                                }
-                                                */
+                                                }                                                */
                                             }
                                             Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers }) => {
                                                 //if step.last {
@@ -801,8 +808,7 @@ impl Peer {
                                                 } else {
                                                     self.get_providers_query_id = None;
                                                     self.msg(format!("Kademlia finished getting providers: {}", closest_peers.len())).await?;
-                                                }
-                                                */
+                                                }                                                */
                                             }
                                             Err(e) => {
                                                 self.get_providers_query_id = None;
@@ -846,9 +852,9 @@ impl Peer {
                                     }
                                 }
                             }
-                            _ => {}
+                            _ => {} // Ignore other query results
                         }
-                        ref _other => {}
+                        ref _other => {} // Ignore other Kademlia events
                     }
 
                     // When we receive a relay client event
@@ -884,37 +890,112 @@ impl Peer {
                         RelayServerEvent::CircuitClosed { src_peer_id, dst_peer_id, error } => {
                             self.msg(format!("Relay circuit closed:\n\tfrom: {src_peer_id}\n\tto: {dst_peer_id}\n\terror: {}", error.map_or("None".to_string(), |e| e.to_string()))).await?;
                         }
-                        _ => {}
+                        _ => {} // Ignore other RelayServer events
                     }
 
                     // When we receive a request_response event
                     SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => match event {
-                        RequestResponseEvent::Message { message, .. } => match message {
-                            RequestResponseMessage::Request { request, .. } => {
-                                //TODO: support ProtocolSupport::Full
-                                debug!(
-                                    "umimplemented: request_response::Message::Request: {:?}",
-                                    request
-                                );
-                            }
-                            RequestResponseMessage::Response { response, .. } => {
-                                info!(
-                                    "request_response::Message::Response: size:{}",
-                                    response.file_body.len()
-                                );
-                                // TODO: store this file (in memory or disk) and provider it via Kademlia
-                            }
-                        }
-                        RequestResponseEvent::OutboundFailure {
-                            request_id, error, ..
-                        } => {
-                            error!(
-                                "request_response::Event::OutboundFailure for request {:?}: {:?}",
-                                request_id, error
-                            )
-                        }
-                        _ => {}
-                    }
+                                            RequestResponseEvent::Message { message, peer_id } => match message {
+                                                RequestResponseMessage::Request { request, .. } => {
+                                                    debug!("Received GitRequest from {}: {:?}", peer_id, request);
+                                                    let response = match request {
+                                                        GitRequest::Clone(repo_url) => {
+                                                            // Define a directory to clone repositories into. For now, use a subdirectory.
+                                                            let clone_dir = PathBuf::from("./cloned_repos");
+                                                            if !clone_dir.exists() {
+                                                                if let Err(e) = std::fs::create_dir_all(&clone_dir) {
+                                                                    error!("Failed to create clone directory {:?}: {}", clone_dir, e);
+                                                                    GitResponse::Error(format!("Failed to create clone directory: {}", e))
+                                                                } else {
+                                                                    GitResponse::Success("Clone directory created".to_string())
+                                                                }
+                                                            } else {
+                                                                GitResponse::Success("Clone directory exists".to_string())
+                                                            }
+                                                            .and_then(|_|
+                                                                {
+                                                                    let mut builder = RepoBuilder::new();
+                                                                    builder.clone_original(true);
+                                                                    // Construct the full path for the new repository
+                                                                    let repo_name = repo_url.split('/').last().unwrap_or("repo");
+                                                                    let repo_path = clone_dir.join(repo_name);
+                    
+                                                                    match builder.clone(&repo_url, &repo_path) {
+                                                                        Ok(_) => {
+                                                                            info!("Successfully cloned repository {} to {:?}", repo_url, repo_path);
+                                                                            GitResponse::Success(format!("Successfully cloned repository {}", repo_url))
+                                                                        }
+                                                                        Err(e) => {
+                                                                            error!("Failed to clone repository {}: {}", repo_url, e);
+                                                                            GitResponse::Error(format!("Failed to clone repository {}: {}", repo_url, e))
+                                                                        }
+                                                                    }
+                                                                })
+                                                        },
+                                                        GitRequest::Fetch(remote_name, refspecs) => {
+                                                            let clone_dir = PathBuf::from("./cloned_repos");
+                                                            let repo_name = remote_name.split('/').last().unwrap_or("repo"); // Assuming remote_name is part of the URL or a known name
+                                                            let repo_path = clone_dir.join(repo_name);
+                    
+                                                            match Repository::open(&repo_path) {
+                                                                Ok(repo) => {
+                                                                    match repo.find_remote(&remote_name) {
+                                                                        Ok(mut remote) => {
+                                                                            let mut fo = git2::FetchOptions::new();
+                                                                            // Configure fetch options if refspecs are provided
+                                                                            if !refspecs.is_empty() {
+                                                                                fo.refspec(refspecs.join(":")); // This might need more sophisticated handling for multiple refspecs
+                                                                            }
+                                                                            
+                                                                            match remote.fetch(&[&refspecs.join(":")], Some(&mut fo), None) {
+                                                                                Ok(bytes_transferred) => {
+                                                                                    info!("Fetched {} bytes from {} for repo at {:?}", bytes_transferred, remote_name, repo_path);
+                                                                                    GitResponse::Success(format!("Fetched {} bytes from {}", bytes_transferred, remote_name))
+                                                                                }
+                                                                                Err(e) => {
+                                                                                    error!("Failed to fetch from remote {}: {}", remote_name, e);
+                                                                                    GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e))
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        Err(e) => {
+                                                                            error!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e);
+                                                                            GitResponse::Error(format!("Failed to find remote '{}': {}", remote_name, e))
+                                                                        }
+                                                                    }
+                                                                }
+                                                                Err(e) => {
+                                                                    error!("Failed to open repository at {:?}: {}", repo_path, e);
+                                                                    GitResponse::Error(format!("Failed to open repository: {}", e))
+                                                                }
+                                                            }
+                                                        },
+                                                        GitRequest::Push(remote, refspecs) => {
+                                                            GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs))
+                                                        },
+                                                        GitRequest::LsRemote(remote) => {
+                                                            GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote))
+                                                        },
+                                                        GitRequest::Status => {
+                                                            GitResponse::Error("Status not yet implemented".to_string())
+                                                        },
+                                                    };
+                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(peer_id, response) {
+                                                        error!("Failed to send GitResponse: {}", e);
+                                                    }
+                                                }
+                                                RequestResponseMessage::Response { response, .. } => {
+                                                    debug!("Received GitResponse: {:?}", response);
+                                                    // TODO: Handle the GitResponse from a sent request.
+                                                }
+                                            },
+                                            RequestResponseEvent::OutboundFailure {
+                                                request_id, error, ..
+                                            } => {
+                                                error!("request_response::Event::OutboundFailure for request {:?}: {:?}", request_id, error)
+                                            }
+                                            _ => {},
+                                        },
                     event => {
                         debug!("Other type of event: {:?}", event);
                     }
@@ -965,7 +1046,7 @@ impl TryFrom<GossipsubEvent> for UniversalConnectivityMessage {
         if let GossipsubEvent::Message {
             propagation_source,
             message,
-            ..
+            .. // Ignore other fields like topic, etc.
         } = event
         {
             let from = message.source.map(Into::into);
@@ -990,7 +1071,7 @@ impl TryFrom<GossipsubEvent> for UniversalConnectivityMessage {
                 }),
                 GOSSIPSUB_PEER_DISCOVERY => {
                     let mut reader = BytesReader::from_bytes(&data);
-                    let peer =
+                    let peer = 
                         DiscoveredPeer::from_reader(&mut reader, &data).map_err(|_| fmt::Error)?;
 
                     let discovered_peer = {

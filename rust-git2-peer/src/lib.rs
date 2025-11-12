@@ -15,6 +15,9 @@ pub use chatpeer::ChatPeer;
 pub mod file_exchange;
 pub use file_exchange::{Codec, Request, Response};
 
+/// The peer git transfer protocol
+pub mod git_exchange;
+
 /// The peer logging module
 pub mod log;
 pub use log::Log;
