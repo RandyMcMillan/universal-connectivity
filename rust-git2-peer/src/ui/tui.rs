@@ -1,4 +1,5 @@
 use crate::{log::Message as LogMessage, ChatPeer, Message, Ui};
+use crate::git_exchange::GitRequest;
 use async_trait::async_trait;
 use crossterm::{
     event::{
