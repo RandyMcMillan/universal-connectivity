@@ -256,10 +256,19 @@ impl Ui for Tui {
                                             chat_widget.add_chat(Some(self.me), chat_widget.input.clone());
                                         }
                                         InputMode::Git => {
-                                            // send the git command to the swarm
-                                            self.to_peer
-                                                .send(Message::GitCommand(input))
-                                                .await?;
+                                            if input == "diff" {
+                                                let output = tokio::process::Command::new("git")
+                                                    .arg("diff")
+                                                    .output()
+                                                    .await?;
+                                                let diff_output = String::from_utf8_lossy(&output.stdout).to_string();
+                                                system_events_widget.add_line(format!("Git Diff:\n{}", diff_output));
+                                            } else {
+                                                // send the git command to the swarm
+                                                self.to_peer
+                                                    .send(Message::GitCommand(input))
+                                                    .await?;
+                                            }
                                         }
                                         InputMode::Command => {
                                             // send the command to the swarm
