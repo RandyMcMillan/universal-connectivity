@@ -952,17 +952,11 @@ impl Peer {
                                                                             match remote.fetch(&refspecs.as_ref().map(|v| v.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).unwrap_or_default(), Some(&mut fo), None) {
                                                                                 Ok(bytes_transferred) => {
                                                                                     info!("Fetched from {} for repo at {:?}", remote_name, repo_path);
-                                                                                                                                                                         GitResponse::Success(format!("Fetched from {}", remote_name))                                                                                }
-                                                                                Err(e) => {
-                                                                                    error!("Failed to fetch from remote {}: {}", remote_name, e);
-                                                                                    GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e))
-                                                                                }
+                                                                                Ok(GitResponse::Success(format!("Fetched from {}", remote_name)))                                                                                }
+                                                                                Err(e) => Ok(GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e)))
                                                                             }
                                                                         }
-                                                                        Err(e) => {
-                                                                            error!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e);
-                                                                            GitResponse::Error(format!("Failed to find remote '{}': {}", remote_name, e))
-                                                                        }
+                                                                        Err(e) => Ok(GitResponse::Error(format!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e)))
                                                                     }
                                                                 }
                                                                 Err(e) => {
@@ -982,7 +976,7 @@ impl Peer {
                                                         },
                                                     };
                                                     if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
-                                                        error!("Failed to send GitResponse: {}", e);
+                                                        error!("Failed to send GitResponse: {:?}", e);
                                                     }
                                                 }
                                                 RequestResponseMessage::Response { response, .. } => {
