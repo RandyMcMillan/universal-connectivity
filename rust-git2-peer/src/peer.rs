@@ -1,6 +1,6 @@
 use crate::{
     decode_unknown_protobuf, ipaddr_to_multiaddr, is_private_ip, pretty_print_fields,
-    proto::Peer as DiscoveredPeer, split_peer_id, ChatPeer, Codec as FileExchangeCodec, Message,
+    proto::Peer as DiscoveredPeer, split_peer_id, ChatPeer, Message,
     Options,
 };
 use crate::git_exchange::{Codec as GitExchangeCodec, GitRequest, GitResponse};
@@ -1053,7 +1053,22 @@ impl Peer {
                                                 }
                                                 RequestResponseMessage::Response { response, .. } => {
                                                     debug!("Received GitResponse: {:?}", response);
-                                                    // TODO: Handle the GitResponse from a sent request.
+                                                    let msg = match response {
+                                                        GitResponse::Success(s) => format!("Git success: {}", s),
+                                                        GitResponse::Error(e) => format!("Git error: {}", e),
+                                                        GitResponse::LsRemote(refs) => {
+                                                            let mut output = String::from("Remote refs:\n");
+                                                            for (name, oid) in refs {
+                                                                output.push_str(&format!("  {}\t{}\n", oid, name));
+                                                            }
+                                                            output
+                                                        }
+                                                        GitResponse::Status(status) => format!("Git status:\n{}", status),
+                                                        GitResponse::Data(_) => "Received raw git data".to_string(),
+                                                    };
+                                                    if let Err(e) = self.to_ui.send(Message::Event(msg)).await {
+                                                        error!("Failed to send GitResponse to UI: {:?}", e);
+                                                    }
                                                 }
                                             },
                                             RequestResponseEvent::OutboundFailure {

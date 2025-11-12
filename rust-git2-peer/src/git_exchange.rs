@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use futures::{io, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{request_response, StreamProtocol};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 // Constants for maximum data transfer sizes
 const MAX_GIT_REQUEST_SIZE: usize = 1_000_000; // 1MB for requests (e.g., repository path, refspec)

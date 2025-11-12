@@ -130,6 +130,12 @@ impl Ui for Tui {
                     Message::Event(event) => {
                         chat_widget.add_event(event);
                     }
+                    Message::GitCommand(cmd) => {
+                        chat_widget.add_event(format!("Received git command: {}", cmd));
+                    }
+                    Message::Command(cmd) => {
+                        chat_widget.add_event(format!("Received command: {}", cmd));
+                    }
                 }
             }
 
@@ -167,10 +173,34 @@ impl Ui for Tui {
                                 .await?;
                         }
 
+                        // Handle ctrl+shift+c for command input
+                        KeyEvent {
+                            code: KeyCode::Char('c'),
+                            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                            .. 
+                        } => {
+                            chat_widget.mode = InputMode::Command;
+                            chat_widget.input.clear();
+                        }
+
+                        // Handle ctrl+g for git input
+                        KeyEvent {
+                            code: KeyCode::Char('g'),
+                            modifiers: KeyModifiers::CONTROL,
+                            ..
+                        } => {
+                            chat_widget.mode = InputMode::Git;
+                            chat_widget.input.clear();
+                        }
+
                         // Handle all other key events
                         _ => match key.code {
                             KeyCode::Tab => {
                                 selected_tab = (selected_tab + 1) % 2;
+                            }
+                            KeyCode::Esc if selected_tab == 0 => {
+                                chat_widget.mode = InputMode::Chat;
+                                chat_widget.input.clear();
                             }
                             KeyCode::Char(c) if selected_tab == 0 => {
                                 chat_widget.input.push(c);
@@ -179,18 +209,32 @@ impl Ui for Tui {
                                 chat_widget.input.pop();
                             }
                             KeyCode::Enter if selected_tab == 0 => {
-                                error!("chat sent");
-                                // send the chat message to the swarm to be gossiped
-                                self.to_peer
-                                    .send(Message::Chat {
-                                        from: Some(self.me),
-                                        data: chat_widget.input.clone().into_bytes(),
-                                    })
-                                    .await?;
+                                match chat_widget.mode {
+                                    InputMode::Chat => {
+                                        // send the chat message to the swarm to be gossiped
+                                        self.to_peer
+                                            .send(Message::Chat {
+                                                from: Some(self.me),
+                                                data: chat_widget.input.clone().into_bytes(),
+                                            })
+                                            .await?;
 
-                                // add our chat to the local chat widget
-                                chat_widget.add_chat(Some(self.me), chat_widget.input.clone());
-
+                                        // add our chat to the local chat widget
+                                        chat_widget.add_chat(Some(self.me), chat_widget.input.clone());
+                                    }
+                                    InputMode::Git => {
+                                        // send the git command to the swarm
+                                        self.to_peer
+                                            .send(Message::GitCommand(chat_widget.input.clone()))
+                                            .await?;
+                                    }
+                                    InputMode::Command => {
+                                        // send the command to the swarm
+                                        self.to_peer
+                                            .send(Message::Command(chat_widget.input.clone()))
+                                            .await?;
+                                    }
+                                }
                                 // clear the input
                                 chat_widget.input.clear();
                             }
@@ -377,12 +421,19 @@ impl Widget for &mut LinesWidget {
 }
 
 // Chat Widget
+enum InputMode {
+    Chat,
+    Git,
+    Command,
+}
+
 struct ChatWidget<'a> {
     me: &'a ChatPeer,
     peers: HashSet<ChatPeer>,
     chat: LinesWidget,
     events: LinesWidget,
     input: String,
+    mode: InputMode,
 }
 
 impl<'a> ChatWidget<'a> {
@@ -397,6 +448,7 @@ impl<'a> ChatWidget<'a> {
             chat: LinesWidget::new("Chat", 100),
             events: LinesWidget::new("System", 100),
             input: String::new(),
+            mode: InputMode::Chat,
         }
     }
 
@@ -472,6 +524,11 @@ impl Widget for &mut ChatWidget<'_> {
         self.events.render(layout[1], buf);
 
         // render the chat input
-        Paragraph::new(format!("{} > {}", self.me, self.input.clone())).render(layout[2], buf);
+        let prompt = match self.mode {
+            InputMode::Chat => format!("{} >", self.me),
+            InputMode::Git => "git >".to_string(),
+            InputMode::Command => "cmd >".to_string(),
+        };
+        Paragraph::new(format!("{} {}", prompt, self.input.clone())).render(layout[2], buf);
     }
 }

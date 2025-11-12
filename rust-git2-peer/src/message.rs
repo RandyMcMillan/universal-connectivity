@@ -24,4 +24,6 @@ pub enum Message {
     Event(String),
     /// Send a git command
     GitCommand(String),
+    /// Send a command
+    Command(String),
 }
