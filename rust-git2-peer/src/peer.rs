@@ -902,20 +902,22 @@ impl Peer {
                                                         GitRequest::Clone(repo_url) => {
                                                             // Define a directory to clone repositories into. For now, use a subdirectory.
                                                             let clone_dir = PathBuf::from("./cloned_repos");
-                                                            if !clone_dir.exists() {
+                                                            let dir_creation_result: Result<(), String> = if !clone_dir.exists() {
                                                                 if let Err(e) = std::fs::create_dir_all(&clone_dir) {
                                                                     error!("Failed to create clone directory {:?}: {}", clone_dir, e);
-                                                                    GitResponse::Error(format!("Failed to create clone directory: {}", e))
+                                                                    Err(format!("Failed to create clone directory: {}", e))
                                                                 } else {
-                                                                    GitResponse::Success("Clone directory created".to_string())
+                                                                    info!("Clone directory created: {:?}", clone_dir);
+                                                                    Ok(())
                                                                 }
                                                             } else {
-                                                                GitResponse::Success("Clone directory exists".to_string())
-                                                            }
-                                                            .and_then(|_|
-                                                                {
+                                                                info!("Clone directory already exists: {:?}", clone_dir);
+                                                                Ok(())
+                                                            };
+
+                                                            dir_creation_result.and_then(|_| {
                                                                     let mut builder = RepoBuilder::new();
-                                                                    builder.clone_original(true);
+
                                                                     // Construct the full path for the new repository
                                                                     let repo_name = repo_url.split('/').last().unwrap_or("repo");
                                                                     let repo_path = clone_dir.join(repo_name);
@@ -923,11 +925,11 @@ impl Peer {
                                                                     match builder.clone(&repo_url, &repo_path) {
                                                                         Ok(_) => {
                                                                             info!("Successfully cloned repository {} to {:?}", repo_url, repo_path);
-                                                                            GitResponse::Success(format!("Successfully cloned repository {}", repo_url))
+                                                                            Ok(GitResponse::Success(format!("Successfully cloned repository {}", repo_url)))
                                                                         }
                                                                         Err(e) => {
                                                                             error!("Failed to clone repository {}: {}", repo_url, e);
-                                                                            GitResponse::Error(format!("Failed to clone repository {}: {}", repo_url, e))
+                                                                            Ok(GitResponse::Error(format!("Failed to clone repository {}: {}", repo_url, e)))
                                                                         }
                                                                     }
                                                                 })
@@ -943,15 +945,14 @@ impl Peer {
                                                                         Ok(mut remote) => {
                                                                             let mut fo = git2::FetchOptions::new();
                                                                             // Configure fetch options if refspecs are provided
-                                                                            if !refspecs.is_empty() {
-                                                                                fo.refspec(refspecs.join(":")); // This might need more sophisticated handling for multiple refspecs
+                                                                            if refspecs.as_ref().map_or(true, |v| v.is_empty()) {
+    
                                                                             }
                                                                             
-                                                                            match remote.fetch(&[&refspecs.join(":")], Some(&mut fo), None) {
+                                                                            match remote.fetch(&refspecs.as_ref().map(|v| v.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).unwrap_or_default(), Some(&mut fo), None) {
                                                                                 Ok(bytes_transferred) => {
-                                                                                    info!("Fetched {} bytes from {} for repo at {:?}", bytes_transferred, remote_name, repo_path);
-                                                                                    GitResponse::Success(format!("Fetched {} bytes from {}", bytes_transferred, remote_name))
-                                                                                }
+                                                                                    info!("Fetched from {} for repo at {:?}", remote_name, repo_path);
+                                                                                                                                                                         GitResponse::Success(format!("Fetched from {}", remote_name))                                                                                }
                                                                                 Err(e) => {
                                                                                     error!("Failed to fetch from remote {}: {}", remote_name, e);
                                                                                     GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e))
