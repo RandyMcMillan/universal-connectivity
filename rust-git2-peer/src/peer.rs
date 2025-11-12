@@ -977,7 +977,7 @@ impl Peer {
 
                     // When we receive a request_response event
                     SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => match event {
-                                            RequestResponseEvent::Message { message, peer, connection_id } => match message {
+                                            RequestResponseEvent::Message { message, peer, connection_id: _ } => match message {
                                                 RequestResponseMessage::Request { request, channel, .. } => {
                                                     debug!("Received GitRequest from {}: {:?}", peer, request);
                                                     let response = match request {
