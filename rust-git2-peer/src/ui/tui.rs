@@ -96,7 +96,7 @@ impl Ui for Tui {
         let mut system_events_widget = LinesWidget::new("System Events", 100);
 
         // Chat Widget
-        let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone(), git_commit_message);
+        let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone(), self.git_commit_message.clone());
 
         // Main loop
         loop {
@@ -298,7 +298,7 @@ impl Ui for Tui {
 }
 
 // Function to wrap text into multiple lines based on a max width
-fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
+fn wrap_text(text: &str, max_width: usize) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
 
     // split the message into lines to preserve any newlines in the message
@@ -323,7 +323,7 @@ fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
             {
                 if !current_line.is_empty() {
                     // add the current line to the lines
-                    lines.push(Line::from(Span::from(current_line)));
+                    lines.push(Line::from(Span::from(current_line.clone())));
                     current_line = String::new();
                 }
 
@@ -344,7 +344,8 @@ fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
                 } else {
                     current_line = format!("{}{}", leading_whitespace, word);
                 }
-            } else {
+            }
+            else {
                 // add the word to the current line
                 if current_line.is_empty() {
                     current_line.push_str(&leading_whitespace);
@@ -356,7 +357,7 @@ fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
         }
 
         if !current_line.is_empty() {
-            lines.push(Line::from(Span::raw(current_line)));
+            lines.push(Line::from(Span::from(current_line.clone())));
         }
     }
 
@@ -518,7 +519,7 @@ impl Widget for &mut ChatWidget<'_> {
                 let wrapped_lines = wrap_text(&full_message, area.width as usize - 2);
                 topic_line_height = wrapped_lines.len() as u16 + 2; // +2 for borders
                 constraints.insert(0, Constraint::Length(topic_line_height));
-                Some(Paragraph::new(wrapped_lines).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
+                Some(Paragraph::new(ratatui::text::Text::from(wrapped_lines).clone()).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
             } else {
                 None
             }
