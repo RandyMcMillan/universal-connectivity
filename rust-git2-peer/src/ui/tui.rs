@@ -1,5 +1,4 @@
 use crate::{log::Message as LogMessage, ChatPeer, Message, Ui};
-use crate::git_exchange::GitRequest;
 use async_trait::async_trait;
 use crossterm::{
     event::{
@@ -151,40 +150,47 @@ impl Ui for Tui {
             if event::poll(Duration::from_millis(18))? {
                 match event::read()? {
                     Event::Key(key) => match key {
-                        // Handle ctrl+c
-                        KeyEvent {
-                            code: KeyCode::Char('c'),
-                            modifiers: KeyModifiers::CONTROL,
-                            ..
-                        } => {
-                            info!("Received Ctrl+C, shutting down...");
-                            self.shutdown.cancel();
-                            break;
-                        }
-
-                        // Handle ctrl+shift+p
-                        KeyEvent {
-                            code: KeyCode::Char('p'),
-                            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-                            ..
-                        } => {
-                            error!("all peers sent");
-                            self.to_peer
-                                .send(Message::AllPeers { peers: vec![] })
-                                .await?;
-                        }
-
-                        // Handle ctrl+shift+c for command input
-                        KeyEvent {
-                            code: KeyCode::Char('c'),
-                            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-                            .. 
-                        } => {
-                            chat_widget.mode = InputMode::Command;
-                            chat_widget.input.clear();
-                        }
-
-                        // Handle ctrl+g for git input
+                                                // Handle ctrl+shift+p
+                                                KeyEvent {
+                                                    code: KeyCode::Char('p'),
+                                                    modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                                                    ..
+                                                } => {
+                                                    error!("all peers sent");
+                                                    self.to_peer
+                                                        .send(Message::AllPeers { peers: vec![] })
+                                                        .await?;
+                                                }
+                        
+                                                // Handle ctrl+shift+c for command input
+                                                KeyEvent {
+                                                    code: KeyCode::Char('c'),
+                                                    modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                                                    ..
+                                                } => {
+                                                    chat_widget.mode = InputMode::Command;
+                                                    chat_widget.input.clear();
+                                                }
+                        
+                                                                                                // Handle ctrl+c
+                        
+                                                                                                KeyEvent {
+                        
+                                                                                                    code: KeyCode::Char('c'),
+                        
+                                                                                                    modifiers: KeyModifiers::CONTROL,
+                        
+                                                                                                    ..
+                        
+                                                                                                } => {
+                        
+                                                                                                    info!("Received Ctrl+C, shutting down...");
+                        
+                                                                                                    self.shutdown.cancel();
+                        
+                                                                                                    break;
+                        
+                                                                                                }                        // Handle ctrl+g for git input
                         KeyEvent {
                             code: KeyCode::Char('g'),
                             modifiers: KeyModifiers::CONTROL,

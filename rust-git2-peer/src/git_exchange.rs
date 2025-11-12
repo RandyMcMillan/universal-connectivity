@@ -22,6 +22,8 @@ pub enum GitRequest {
     Push(String, Vec<String>),
     /// Request to list remote references (e.g., `git ls-remote`).
     LsRemote(String),
+    /// Request to list remote heads (branches and tags) from a given URL.
+    LsRemoteHeads(String),
     /// Request to get repository status (e.g., `git status`).
     Status(String),
 }

@@ -53,13 +53,12 @@ use std::{
     hash::{Hash, Hasher},
     time::Duration,
     path::PathBuf,
-    fs,
 };
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use git2::build::RepoBuilder;
-use git2::{Repository, Remote};
+use git2::Repository;
 
 // Universal connectivity agent string
 const UNIVERSAL_CONNECTIVITY_AGENT: &str = "universal-connectivity/0.1.0";
@@ -508,6 +507,14 @@ impl Peer {
                                         Some(GitRequest::LsRemote(parts[1].to_string()))
                                     } else {
                                         self.msg("ls-remote requires a repository path").await?;
+                                        None
+                                    }
+                                }
+                                "ls-remote-heads" => {
+                                    if parts.len() > 1 {
+                                        Some(GitRequest::LsRemoteHeads(parts[1].to_string()))
+                                    } else {
+                                        self.msg("ls-remote-heads requires a repository URL").await?;
                                         None
                                     }
                                 }
@@ -1024,6 +1031,25 @@ impl Peer {
                                                                     }
                                                                 }
                                                                 Err(e) => GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)),
+                                                            }
+                                                        },
+                                                        GitRequest::LsRemoteHeads(repo_url) => {
+                                                            match git2::Remote::create_detached(&*repo_url) {
+                                                                Ok(mut remote) => {
+                                                                    match remote.connect(git2::Direction::Fetch) {
+                                                                        Ok(_) => {
+                                                                            match remote.list() {
+                                                                                Ok(heads) => {
+                                                                                    let remote_refs: Vec<(String, String)> = heads.iter().map(|h| (h.name().to_string(), h.oid().to_string())).collect();
+                                                                                    GitResponse::LsRemote(remote_refs)
+                                                                                }
+                                                                                Err(e) => GitResponse::Error(format!("Failed to list remote heads for {}: {}", repo_url, e)),
+                                                                            }
+                                                                        }
+                                                                        Err(e) => GitResponse::Error(format!("Failed to connect to remote {}: {}", repo_url, e)),
+                                                                    }
+                                                                }
+                                                                Err(e) => GitResponse::Error(format!("Failed to create detached remote from URL {}: {}", repo_url, e)),
                                                             }
                                                         },
                                                         GitRequest::Status(repo_path_str) => {
