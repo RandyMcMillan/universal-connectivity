@@ -206,30 +206,56 @@ impl Ui for Tui {
                                 chat_widget.input.pop();
                             }
                             KeyCode::Enter if selected_tab == 0 => {
-                                match chat_widget.mode {
-                                    InputMode::Chat => {
-                                        // send the chat message to the swarm to be gossiped
-                                        self.to_peer
-                                            .send(Message::Chat {
-                                                from: Some(self.me),
-                                                data: chat_widget.input.clone().into_bytes(),
-                                            })
-                                            .await?;
+                                let input = chat_widget.input.clone();
+                                if input.starts_with("/") {
+                                    let parts: Vec<&str> = input.splitn(2, ' ').collect();
+                                    let command = parts[0];
+                                    match command {
+                                        "/chat" => {
+                                            chat_widget.mode = InputMode::Chat;
+                                            chat_widget.add_event("Switched to chat mode.");
+                                        }
+                                        "/git" => {
+                                            chat_widget.mode = InputMode::Git;
+                                            chat_widget.add_event("Switched to git command mode.");
+                                        }
+                                        "/command" => {
+                                            chat_widget.mode = InputMode::Command;
+                                            chat_widget.add_event("Switched to shell command mode.");
+                                        }
+                                        "/help" => {
+                                            chat_widget.add_event("Available commands: /chat, /git, /command, /help");
+                                        }
+                                        _ => {
+                                            chat_widget.add_event(format!("Unknown command: {}", command));
+                                        }
+                                    }
+                                } else {
+                                    match chat_widget.mode {
+                                        InputMode::Chat => {
+                                            // send the chat message to the swarm to be gossiped
+                                            self.to_peer
+                                                .send(Message::Chat {
+                                                    from: Some(self.me),
+                                                    data: input.into_bytes(),
+                                                })
+                                                .await?;
 
-                                        // add our chat to the local chat widget
-                                        chat_widget.add_chat(Some(self.me), chat_widget.input.clone());
-                                    }
-                                    InputMode::Git => {
-                                        // send the git command to the swarm
-                                        self.to_peer
-                                            .send(Message::GitCommand(chat_widget.input.clone()))
-                                            .await?;
-                                    }
-                                    InputMode::Command => {
-                                        // send the command to the swarm
-                                        self.to_peer
-                                            .send(Message::Command(chat_widget.input.clone()))
-                                            .await?;
+                                            // add our chat to the local chat widget
+                                            chat_widget.add_chat(Some(self.me), chat_widget.input.clone());
+                                        }
+                                        InputMode::Git => {
+                                            // send the git command to the swarm
+                                            self.to_peer
+                                                .send(Message::GitCommand(input))
+                                                .await?;
+                                        }
+                                        InputMode::Command => {
+                                            // send the command to the swarm
+                                            self.to_peer
+                                                .send(Message::Command(input))
+                                                .await?;
+                                        }
                                     }
                                 }
                                 // clear the input
