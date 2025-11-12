@@ -22,4 +22,6 @@ pub enum Message {
     RemovePeer(ChatPeer),
     /// Add an event message
     Event(String),
+    /// Send a git command
+    GitCommand(String),
 }

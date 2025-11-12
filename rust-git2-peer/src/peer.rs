@@ -494,6 +494,44 @@ impl Peer {
                             _ => self.msg("Sent chat message from you".to_string()).await?,
                         }
                     }
+                    Message::GitCommand(command) => {
+                        let parts: Vec<&str> = command.split_whitespace().collect();
+                        if parts.is_empty() {
+                            self.msg("Empty git command").await?;
+                            continue;
+                        }
+                        let peer = self.swarm.behaviour().gossipsub.all_peers().next().map(|(peer_id, _)| *peer_id);
+                        if let Some(peer_id) = peer {
+                            let request = match parts[0] {
+                                "ls-remote" => {
+                                    if parts.len() > 1 {
+                                        Some(GitRequest::LsRemote(parts[1].to_string()))
+                                    } else {
+                                        self.msg("ls-remote requires a repository path").await?;
+                                        None
+                                    }
+                                }
+                                "status" => {
+                                    if parts.len() > 1 {
+                                        Some(GitRequest::Status(parts[1].to_string()))
+                                    } else {
+                                        self.msg("status requires a repository path").await?;
+                                        None
+                                    }
+                                }
+                                _ => {
+                                    self.msg(format!("Unknown git command: {}", parts[0])).await?;
+                                    None
+                                }
+                            };
+                            if let Some(request) = request {
+                                self.swarm.behaviour_mut().request_response.send_request(&peer_id, request);
+                                self.msg(format!("Sent git command to {}", peer_id)).await?;
+                            }
+                        } else {
+                            self.msg("No peers to send git command to").await?;
+                        }
+                    }
                     Message::AllPeers { .. } => {
                         error!("all peers received");
                         let peers = self
@@ -968,11 +1006,45 @@ impl Peer {
                                                             GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs))
 
                                                         },
-                                                        GitRequest::LsRemote(remote) => {
-                                                            GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote))
+                                                        GitRequest::LsRemote(repo_path_str) => {
+                                                            let repo_path = PathBuf::from(&repo_path_str);
+                                                            match Repository::open(&repo_path) {
+                                                                Ok(repo) => {
+                                                                    match repo.references() {
+                                                                        Ok(refs) => {
+                                                                            let mut remote_refs = Vec::new();
+                                                                            for reference in refs.flatten() {
+                                                                                if let (Some(name), Some(oid)) = (reference.name(), reference.target()) {
+                                                                                    remote_refs.push((name.to_string(), oid.to_string()));
+                                                                                }
+                                                                            }
+                                                                            GitResponse::LsRemote(remote_refs)
+                                                                        }
+                                                                        Err(e) => GitResponse::Error(format!("Failed to list references for repo at {:?}: {}", repo_path, e)),
+                                                                    }
+                                                                }
+                                                                Err(e) => GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)),
+                                                            }
                                                         },
-                                                        GitRequest::Status => {
-                                                            GitResponse::Error("Status not yet implemented".to_string())
+                                                        GitRequest::Status(repo_path_str) => {
+                                                            let repo_path = PathBuf::from(&repo_path_str);
+                                                            match Repository::open(&repo_path) {
+                                                                Ok(repo) => {
+                                                                    match repo.statuses(None) {
+                                                                        Ok(statuses) => {
+                                                                            let mut status_summary = String::new();
+                                                                            for entry in statuses.iter() {
+                                                                                let path = entry.path().unwrap_or("unknown");
+                                                                                let status = entry.status();
+                                                                                status_summary.push_str(&format!("{:?}: {:?}\n", path, status));
+                                                                            }
+                                                                            GitResponse::Status(status_summary)
+                                                                        }
+                                                                        Err(e) => GitResponse::Error(format!("Failed to get status for repo at {:?}: {}", repo_path, e)),
+                                                                    }
+                                                                }
+                                                                Err(e) => GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)),
+                                                            }
                                                         },
                                                     };
                                                     if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {

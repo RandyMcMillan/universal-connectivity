@@ -24,7 +24,7 @@ pub enum GitRequest {
     /// Request to list remote references (e.g., `git ls-remote`).
     LsRemote(String),
     /// Request to get repository status (e.g., `git status`).
-    Status,
+    Status(String),
 }
 
 /// Represents possible Git responses that can be sent between peers.
