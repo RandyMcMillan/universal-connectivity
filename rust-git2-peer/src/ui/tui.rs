@@ -12,12 +12,14 @@ use libp2p::core::PeerId;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    prelude::{Buffer, Rect, Widget},
+    prelude::{Buffer, Rect/*, Widget*/},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
 };
+use ratatui::widgets::Widget;
+use ratatui_textarea::{Input, TextArea};
 use std::{
     collections::{HashSet, VecDeque},
     io,
@@ -135,8 +137,8 @@ impl Ui for Tui {
 
             // Draw the UI
             terminal.draw(|f| match selected_tab {
-                0 => f.render_widget(&mut chat_widget, f.area()),
-                1 => f.render_widget(&mut log_widget, f.area()),
+                0 => f.render_widget(&mut chat_widget, f.size()),
+                1 => f.render_widget(&mut log_widget, f.size()),
                 _ => {}
             })?;
 
@@ -375,13 +377,12 @@ impl Widget for &mut LinesWidget {
         List::new(logs).block(block).render(area, buf);
     }
 }
-
 // Chat Widget
 struct ChatWidget<'a> {
     me: &'a ChatPeer,
     peers: HashSet<ChatPeer>,
     chat: LinesWidget,
-    events: LinesWidget,
+    events: TextArea<'static>,
     input: String,
 }
 
@@ -395,14 +396,16 @@ impl<'a> ChatWidget<'a> {
             me,
             peers,
             chat: LinesWidget::new("Chat", 100),
-            events: LinesWidget::new("System", 100),
+            events: TextArea::default(),
             input: String::new(),
         }
     }
 
     // Handle a mouse event
     fn mouse_event(&mut self, event: MouseEvent) -> bool {
-        self.chat.mouse_event(event) || self.events.mouse_event(event)
+        let input = Input::from(Event::Mouse(event));
+        self.events.input(input);
+        self.chat.mouse_event(event)
     }
 
     // Add a chat message to the widget
@@ -413,7 +416,8 @@ impl<'a> ChatWidget<'a> {
 
     // Add an event message to the widget
     fn add_event(&mut self, event: impl Into<String>) {
-        self.events.add_line(event);
+        self.events.insert_str(event);
+        self.events.insert_newline();
     }
 }
 
@@ -469,7 +473,12 @@ impl Widget for &mut ChatWidget<'_> {
             .render(top_layout[1], buf);
 
         // render the events messages
-        self.events.render(layout[1], buf);
+        let events_block = Block::default()
+            .title("System")
+            .borders(Borders::ALL)
+            .style(Style::default());
+        self.events.set_block(events_block);
+        self.events.widget().render(layout[1], buf);
 
         // render the chat input
         Paragraph::new(format!("{} > {}", self.me, self.input.clone())).render(layout[2], buf);
