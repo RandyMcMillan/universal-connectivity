@@ -960,19 +960,19 @@ impl Peer {
                                                                 }
                                                                 Err(e) => Ok(GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)))
                                                             }
-                                                        },
+                                                        }?,
                                                         GitRequest::Push(remote, refspecs) => {
                                                             Ok(GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs)))
 
-                                                        },
+                                                        }?,
                                                         GitRequest::LsRemote(remote) => {
                                                             Ok(GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote)))
-                                                        },
+                                                        }?,
                                                         GitRequest::Status => {
                                                             Ok(GitResponse::Error("Status not yet implemented".to_string()))
-                                                        },
+                                                        }?,
                                                     };
-                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response?) {
+                                                    if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
                                                         error!("Failed to send GitResponse: {:?}", e);
                                                     }
                                                 }
