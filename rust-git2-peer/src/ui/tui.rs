@@ -150,15 +150,7 @@ impl Ui for Tui {
             if event::poll(Duration::from_millis(18))? {
                 match event::read()? {
                     Event::Key(key) => match key {
-                        // Handle Ctrl+Shift+C for command input mode
-                        KeyEvent {
-                            code: KeyCode::Char('c'),
-                            modifiers,
-                            ..
-                        } if modifiers == (KeyModifiers::CONTROL | KeyModifiers::SHIFT) => {
-                            chat_widget.mode = InputMode::Command;
-                            chat_widget.input.clear();
-                        }
+
                         // Handle Ctrl+C for application exit
                         KeyEvent {
                             code: KeyCode::Char('c'),
