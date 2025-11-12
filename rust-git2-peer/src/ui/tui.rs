@@ -43,6 +43,8 @@ pub struct Tui {
     shutdown: CancellationToken,
     // the gossipsub topic
     topic: Option<String>,
+    // the git commit message if the topic is a git commit hash
+    git_commit_message: Option<String>,
 }
 
 impl Tui {
@@ -66,6 +68,7 @@ impl Tui {
             from_peer,
             shutdown,
             topic,
+            git_commit_message,
         });
 
         (ui, to_ui, from_ui)
@@ -320,7 +323,7 @@ fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
             {
                 if !current_line.is_empty() {
                     // add the current line to the lines
-                    lines.push(Line::from(Span::raw(current_line)));
+                    lines.push(Line::from(Span::from(current_line)));
                     current_line = String::new();
                 }
 
@@ -335,7 +338,7 @@ fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
                         };
                         let (chunk, rest) = remaining.split_at(split_point);
                         let l = format!("{}{}", leading_whitespace, chunk);
-                        lines.push(Line::from(Span::raw(l)));
+                        lines.push(Line::from(Span::from(l)));
                         remaining = rest;
                     }
                 } else {
@@ -560,7 +563,7 @@ impl Widget for &mut ChatWidget<'_> {
                         Style::default().add_modifier(Modifier::ITALIC),
                     ))
                 } else {
-                    ListItem::new(Span::raw(p.to_string()))
+                    ListItem::new(Span::from(p.to_string()))
                 }
             })
             .collect();
