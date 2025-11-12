@@ -157,7 +157,7 @@ impl Peer {
         // parse the command line arguments
         let opt = Options::parse();
 
-        let mut chat_topic_name = if let Some(topic) = opt.topic {
+        let mut chat_topic_name = if let Some(topic) = opt.topic.clone() {
             info!("Using custom topic: {}", topic);
             to_ui.send(Message::Event(format!("Using custom topic: {}", topic))).await?;
             topic
