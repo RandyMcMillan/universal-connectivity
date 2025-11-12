@@ -900,7 +900,6 @@ impl Peer {
                                                     debug!("Received GitRequest from {}: {:?}", peer, request);
                                                     let response = match request {
                                                         GitRequest::Clone(repo_url) => {
-                                                            // Define a directory to clone repositories into. For now, use a subdirectory.
                                                             let clone_dir = PathBuf::from("./cloned_repos");
                                                             let dir_creation_result: Result<(), String> = if !clone_dir.exists() {
                                                                 if let Err(e) = std::fs::create_dir_all(&clone_dir) {
@@ -915,24 +914,24 @@ impl Peer {
                                                                 Ok(())
                                                             };
 
-                                                            dir_creation_result.and_then(|_| {
+                                                            match dir_creation_result {
+                                                                Ok(_) => {
                                                                     let mut builder = RepoBuilder::new();
-
-                                                                    // Construct the full path for the new repository
                                                                     let repo_name = repo_url.split('/').last().unwrap_or("repo");
                                                                     let repo_path = clone_dir.join(repo_name);
-                    
                                                                     match builder.clone(&repo_url, &repo_path) {
                                                                         Ok(_) => {
                                                                             info!("Successfully cloned repository {} to {:?}", repo_url, repo_path);
-                                                                            Ok(GitResponse::Success(format!("Successfully cloned repository {}", repo_url)))
+                                                                            GitResponse::Success(format!("Successfully cloned repository {}", repo_url))
                                                                         }
                                                                         Err(e) => {
                                                                             error!("Failed to clone repository {}: {}", repo_url, e);
-                                                                            Ok(GitResponse::Error(format!("Failed to clone repository {}: {}", repo_url, e)))
+                                                                            GitResponse::Error(format!("Failed to clone repository {}: {}", repo_url, e))
                                                                         }
                                                                     }
-                                                                })
+                                                                }
+                                                                Err(e) => GitResponse::Error(e),
+                                                            }
                                                         },
                                                         GitRequest::Fetch(remote_name, refspecs) => {
                                                             let clone_dir = PathBuf::from("./cloned_repos");
