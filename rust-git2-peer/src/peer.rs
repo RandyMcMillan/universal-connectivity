@@ -952,7 +952,7 @@ impl Peer {
                                                                                 Ok(bytes_transferred) => {
                                                                                     info!("Fetched from {} for repo at {:?}", remote_name, repo_path);
                                                                                 Ok(GitResponse::Success(format!("Fetched from {}", remote_name)))                                                                                }
-                                                                                Err(e) => Ok(GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e)))
+                                                                                Err(anyhow::anyhow!("Failed to fetch from remote {}: {}", remote_name, e))
                                                                             }
                                                                         }
                                                                         Err(e) => Ok(GitResponse::Error(format!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e)))
