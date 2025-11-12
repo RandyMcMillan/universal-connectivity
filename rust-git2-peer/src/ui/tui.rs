@@ -261,7 +261,7 @@ impl Ui for Tui {
 }
 
 // Function to wrap text into multiple lines based on a max width
-fn wrap_text(text: &str, max_width: usize) -> Vec<Line> {
+fn wrap_text<'a>(text: &'a str, max_width: usize) -> Vec<Line<'a>> {
     let mut lines = Vec::new();
 
     // split the message into lines to preserve any newlines in the message

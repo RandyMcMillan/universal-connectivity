@@ -439,10 +439,13 @@ impl Peer {
         for addr in self.to_dial.clone().iter() {
             if let Ok(addr) = addr.parse::<Multiaddr>() {
                 // attempt to dial the address
+                debug!("Attempting to dial Multiaddr: {}", addr);
                 if let Err(e) = self.swarm.dial(addr.clone()) {
                     self.msg(format!("Failed to dial {addr}: {e}")).await?;
+                    debug!("Failed to dial Multiaddr {}: {}", addr, e);
                 } else {
                     self.msg(format!("Dialed {addr}")).await?;
+                    debug!("Successfully dialed Multiaddr: {}", addr);
                 }
 
                 // add the address to the kademlia routing table if it is enabled
@@ -453,10 +456,13 @@ impl Peer {
                 }
             } else if let Ok(addr) = addr.parse::<PeerId>() {
                 // attempt to dial the address
+                debug!("Attempting to dial PeerId: {}", addr);
                 if let Err(e) = self.swarm.dial(addr) {
                     self.msg(format!("Failed to dial {addr}: {e}")).await?;
+                    debug!("Failed to dial PeerId {}: {}", addr, e);
                 } else {
                     self.msg(format!("Dialed {addr}")).await?;
+                    debug!("Successfully dialed PeerId: {}", addr);
                 }
             } else {
                 self.msg(format!("Failed to parse {addr}")).await?;
