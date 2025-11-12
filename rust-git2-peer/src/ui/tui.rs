@@ -519,7 +519,7 @@ impl Widget for &mut ChatWidget<'_> {
                 let wrapped_lines = wrap_text(&full_message, area.width as usize - 2);
                 topic_line_height = wrapped_lines.len() as u16 + 2; // +2 for borders
                 constraints.insert(0, Constraint::Length(topic_line_height));
-                Some(Paragraph::new(ratatui::text::Text::from(wrapped_lines).clone()).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
+                Some(Paragraph::new(ratatui::text::Text::from(wrapped_lines)).block(Block::default().borders(Borders::TOP | Borders::LEFT | Borders::RIGHT).title("Gossipsub Topic")))
             } else {
                 None
             }
