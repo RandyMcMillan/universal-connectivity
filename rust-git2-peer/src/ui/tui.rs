@@ -88,6 +88,9 @@ impl Ui for Tui {
         // Log Widget
         let mut log_widget = LinesWidget::new("Log", 200);
 
+        // System Events Widget
+        let mut system_events_widget = LinesWidget::new("System Events", 100);
+
         // Chat Widget
         let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone());
 
@@ -120,7 +123,7 @@ impl Ui for Tui {
                     }
                     Message::AddPeer(peer) => {
                         if chat_widget.peers.insert(peer) {
-                            chat_widget.add_event(format!(
+                            system_events_widget.add_line(format!(
                                 "Adding peer:\n\tpeer id: {}\n\tname: {}",
                                 peer.id(),
                                 peer.name()
@@ -129,17 +132,17 @@ impl Ui for Tui {
                     }
                     Message::RemovePeer(peer) => {
                         if chat_widget.peers.remove(&peer) {
-                            chat_widget.add_event(format!("Removing peer: {peer:?}"));
+                            system_events_widget.add_line(format!("Removing peer: {peer:?}"));
                         }
                     }
                     Message::Event(event) => {
-                        chat_widget.add_event(event);
+                        system_events_widget.add_line(event);
                     }
                     Message::GitCommand(cmd) => {
-                        chat_widget.add_event(format!("Received git command: {}", cmd));
+                        system_events_widget.add_line(format!("Received git command: {}", cmd));
                     }
                     Message::Command(cmd) => {
-                        chat_widget.add_event(format!("Received command: {}", cmd));
+                        system_events_widget.add_line(format!("Received command: {}", cmd));
                     }
                 }
             }
@@ -147,7 +150,14 @@ impl Ui for Tui {
             // Draw the UI
             terminal.draw(|f| match selected_tab {
                 0 => f.render_widget(&mut chat_widget, f.area()),
-                1 => f.render_widget(&mut log_widget, f.area()),
+                1 => {
+                    let log_layout = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                        .split(f.area());
+                    f.render_widget(&mut log_widget, log_layout[0]);
+                    f.render_widget(&mut system_events_widget, log_layout[1]);
+                }
                 _ => {}
             })?;
 
@@ -210,21 +220,21 @@ impl Ui for Tui {
                                     match command {
                                         "/chat" => {
                                             chat_widget.mode = InputMode::Chat;
-                                            chat_widget.add_event("Switched to chat mode.");
+                                            system_events_widget.add_line("Switched to chat mode.");
                                         }
                                         "/git" => {
                                             chat_widget.mode = InputMode::Git;
-                                            chat_widget.add_event("Switched to git command mode.");
+                                            system_events_widget.add_line("Switched to git command mode.");
                                         }
                                         "/command" => {
                                             chat_widget.mode = InputMode::Command;
-                                            chat_widget.add_event("Switched to shell command mode.");
+                                            system_events_widget.add_line("Switched to shell command mode.");
                                         }
                                         "/help" => {
-                                            chat_widget.add_event("Available commands: /chat, /git, /command, /help");
+                                            system_events_widget.add_line("Available commands: /chat, /git, /command, /help");
                                         }
                                         _ => {
-                                            chat_widget.add_event(format!("Unknown command: {}", command));
+                                            system_events_widget.add_line(format!("Unknown command: {}", command));
                                         }
                                     }
                                 } else {
@@ -266,7 +276,7 @@ impl Ui for Tui {
                             let _ = chat_widget.mouse_event(event);
                         }
                         1 => {
-                            let _ = log_widget.mouse_event(event);
+                            let _ = log_widget.mouse_event(event) || system_events_widget.mouse_event(event);
                         }
                         _ => {}
                     },
@@ -451,7 +461,6 @@ struct ChatWidget<'a> {
     me: &'a ChatPeer,
     peers: HashSet<ChatPeer>,
     chat: LinesWidget,
-    events: LinesWidget,
     input: String,
     mode: InputMode,
     topic: Option<String>,
@@ -467,7 +476,6 @@ impl<'a> ChatWidget<'a> {
             me,
             peers,
             chat: LinesWidget::new("Chat", 100),
-            events: LinesWidget::new("System", 100),
             input: String::new(),
             mode: InputMode::Chat,
             topic,
@@ -476,7 +484,7 @@ impl<'a> ChatWidget<'a> {
 
     // Handle a mouse event
     fn mouse_event(&mut self, event: MouseEvent) -> bool {
-        self.chat.mouse_event(event) || self.events.mouse_event(event)
+        self.chat.mouse_event(event)
     }
 
     // Add a chat message to the widget
@@ -484,17 +492,11 @@ impl<'a> ChatWidget<'a> {
         let peer = peer.map_or("Unknown".to_string(), |p| p.to_string());
         self.chat.add_line(format!("{}: {}", peer, message.into()));
     }
-
-    // Add an event message to the widget
-    fn add_event(&mut self, event: impl Into<String>) {
-        self.events.add_line(event);
-    }
 }
 
 impl Widget for &mut ChatWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut constraints = vec![
-            Constraint::Percentage(50),
             Constraint::Percentage(50),
             Constraint::Length(1),
         ];
@@ -557,15 +559,12 @@ impl Widget for &mut ChatWidget<'_> {
             .block(peers_block)
             .render(top_layout[1], buf);
 
-        // render the events messages
-        self.events.render(layout[current_layout_index + 1], buf);
-
         // render the chat input
         let prompt = match self.mode {
             InputMode::Chat => format!("{} >", self.me),
             InputMode::Git => "git >".to_string(),
             InputMode::Command => "cmd >".to_string(),
         };
-        Paragraph::new(format!("{} {}", prompt, self.input.clone())).render(layout[current_layout_index + 2], buf);
+        Paragraph::new(format!("{} {}", prompt, self.input.clone())).render(layout[current_layout_index + 1], buf);
     }
 }
