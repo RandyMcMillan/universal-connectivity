@@ -155,6 +155,18 @@ impl Peer {
         // parse the command line arguments
         let opt = Options::parse();
 
+        // Check if we are in a git repository
+        match Repository::discover(".") {
+            Ok(repo) => {
+                info!("Detected git repository at: {:?}", repo.path());
+                to_ui.send(Message::Event(format!("Detected git repository at: {:?}", repo.path()))).await?;
+            },
+            Err(e) => {
+                info!("Not in a git repository: {}", e);
+                to_ui.send(Message::Event(format!("Not in a git repository: {}", e))).await?;
+            }
+        }
+
         // Listen Ports
         // const PORT_WEBRTC: u16 = 9090; // UDP
         // const PORT_QUIC: u16 = 9091; // UDP
