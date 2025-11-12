@@ -949,28 +949,31 @@ impl Peer {
                                                                             }
                                                                             
                                                                             match remote.fetch(&refspecs.as_ref().map(|v| v.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).unwrap_or_default(), Some(&mut fo), None) {
-                                                                                Ok(bytes_transferred) => {
+                                                                                Ok(_bytes_transferred) => {
                                                                                     info!("Fetched from {} for repo at {:?}", remote_name, repo_path);
-                                                                                Ok(GitResponse::Success(format!("Fetched from {}", remote_name)))                                                                                }
-                                                                                Err(anyhow::anyhow!("Failed to fetch from remote {}: {}", remote_name, e))
+                                                                                    GitResponse::Success(format!("Fetched from {}", remote_name))
+                                                                                }
+                                                                                Err(e) => {
+                                                                                    GitResponse::Error(format!("Failed to fetch from remote {}: {}", remote_name, e))
+                                                                                }
                                                                             }
                                                                         }
-                                                                        Err(e) => Ok(GitResponse::Error(format!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e)))
+                                                                        Err(e) => GitResponse::Error(format!("Failed to find remote '{}' in repo at {:?}: {}", remote_name, repo_path, e))
                                                                     }
                                                                 }
-                                                                Err(e) => Ok(GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)))
+                                                                Err(e) => GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e))
                                                             }
-                                                        }?,
+                                                        },
                                                         GitRequest::Push(remote, refspecs) => {
-                                                            Ok(GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs)))
+                                                            GitResponse::Error(format!("Push not yet implemented for remote: {}, refspecs: {:?}", remote, refspecs))
 
-                                                        }?,
+                                                        },
                                                         GitRequest::LsRemote(remote) => {
-                                                            Ok(GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote)))
-                                                        }?,
+                                                            GitResponse::Error(format!("LsRemote not yet implemented for remote: {}", remote))
+                                                        },
                                                         GitRequest::Status => {
-                                                            Ok(GitResponse::Error("Status not yet implemented".to_string()))
-                                                        }?,
+                                                            GitResponse::Error("Status not yet implemented".to_string())
+                                                        },
                                                     };
                                                     if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
                                                         error!("Failed to send GitResponse: {:?}", e);
