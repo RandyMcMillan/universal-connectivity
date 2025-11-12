@@ -153,18 +153,18 @@ impl Ui for Tui {
                         // Handle Ctrl+Shift+C for command input mode
                         KeyEvent {
                             code: KeyCode::Char('c'),
-                            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                            modifiers,
                             ..
-                        } => {
+                        } if modifiers == (KeyModifiers::CONTROL | KeyModifiers::SHIFT) => {
                             chat_widget.mode = InputMode::Command;
                             chat_widget.input.clear();
                         }
                         // Handle Ctrl+C for application exit
                         KeyEvent {
                             code: KeyCode::Char('c'),
-                            modifiers: KeyModifiers::CONTROL,
+                            modifiers,
                             ..
-                        } => {
+                        } if modifiers == KeyModifiers::CONTROL => {
                             info!("Received Ctrl+C, shutting down...");
                             self.shutdown.cancel();
                             break;
