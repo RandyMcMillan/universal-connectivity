@@ -72,7 +72,7 @@ const FILE_EXCHANGE_PROTOCOL_NAME: StreamProtocol =
 const GIT_EXCHANGE_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/universal-connectivity-git/1");
 
 // Gossipsub Topics
-const GOSSIPSUB_CHAT_TOPIC: &str = "universal-connectivity";
+
 const GOSSIPSUB_CHAT_FILE_TOPIC: &str = "universal-connectivity-file";
 const GOSSIPSUB_PEER_DISCOVERY: &str = "universal-connectivity-browser-peer-discovery";
 
@@ -141,6 +141,8 @@ pub struct Peer {
     get_providers_query_id: Option<QueryId>,
     /// The query id for getting the closest peers to the universal connectivity agent string
     get_closest_peers_query_id: HashSet<QueryId>,
+    /// The current chat topic
+    current_chat_topic: String,
 }
 
 impl Peer {
@@ -155,11 +157,24 @@ impl Peer {
         // parse the command line arguments
         let opt = Options::parse();
 
+        let mut chat_topic_name = "universal-connectivity".to_string();
         // Check if we are in a git repository
         match Repository::discover(".") {
             Ok(repo) => {
                 info!("Detected git repository at: {:?}", repo.path());
                 to_ui.send(Message::Event(format!("Detected git repository at: {:?}", repo.path()))).await?;
+                match repo.head() {
+                    Ok(head) => {
+                        if let Some(oid) = head.target() {
+                            chat_topic_name = oid.to_string();
+                            to_ui.send(Message::Event(format!("Using git HEAD as chat topic: {}", chat_topic_name))).await?;
+                        }
+                    },
+                    Err(e) => {
+                        info!("Could not get git HEAD: {}", e);
+                        to_ui.send(Message::Event(format!("Could not get git HEAD: {}", e))).await?;
+                    }
+                }
             },
             Err(e) => {
                 info!("Not in a git repository: {}", e);
@@ -374,6 +389,7 @@ impl Peer {
             start_providing_query_id: None,
             get_providers_query_id: None,
             get_closest_peers_query_id: HashSet::new(),
+            current_chat_topic: chat_topic_name,
         })
     }
 
@@ -469,7 +485,7 @@ impl Peer {
         }
 
         // Initialize the gossipsub topics, the hashes are the same as the topic names
-        let chat_topic = GossipsubIdentTopic::new(GOSSIPSUB_CHAT_TOPIC);
+        let chat_topic = GossipsubIdentTopic::new(self.current_chat_topic.clone());
         let file_topic = GossipsubIdentTopic::new(GOSSIPSUB_CHAT_FILE_TOPIC);
         let peer_discovery = GossipsubIdentTopic::new(GOSSIPSUB_PEER_DISCOVERY);
 
@@ -658,7 +674,7 @@ impl Peer {
                     // When we receive a gossipsub event
                     SwarmEvent::Behaviour(BehaviourEvent::Gossipsub(event)) => match event {
                         GossipsubEvent::Message { .. } => {
-                            let msg = UniversalConnectivityMessage::try_from(event)?;
+                            let msg = UniversalConnectivityMessage::try_from_gossipsub_event(event, &self.current_chat_topic)?;
                             self.msg(format!("{msg}")).await?;
                             match msg {
                                 UniversalConnectivityMessage::Chat { from, data, ..} => {
@@ -702,13 +718,13 @@ impl Peer {
                         }
                         GossipsubEvent::Subscribed { peer_id, topic } => {
                             debug!("{peer_id} subscribed to {topic}");
-                            if topic.as_str() == GOSSIPSUB_CHAT_TOPIC {
+                            if topic.as_str() == self.current_chat_topic {
                                 self.to_ui.send(Message::AddPeer(peer_id.into())).await?;
                             }
                         }
                         GossipsubEvent::Unsubscribed { peer_id, topic } => {
                             debug!("{peer_id} unsubscribed from {topic}");
-                            if topic.as_str() == GOSSIPSUB_CHAT_TOPIC {
+                            if topic.as_str() == self.current_chat_topic {
                                 self.to_ui.send(Message::RemovePeer(peer_id.into())).await?;
                             }
                         }
@@ -1159,10 +1175,8 @@ enum UniversalConnectivityMessage {
     },
 }
 
-impl TryFrom<GossipsubEvent> for UniversalConnectivityMessage {
-    type Error = anyhow::Error;
-
-    fn try_from(event: GossipsubEvent) -> anyhow::Result<Self, Self::Error> {
+impl UniversalConnectivityMessage {
+    fn try_from_gossipsub_event(event: GossipsubEvent, chat_topic_name: &str) -> anyhow::Result<Self, anyhow::Error> {
         if let GossipsubEvent::Message {
             propagation_source,
             message,
@@ -1175,7 +1189,7 @@ impl TryFrom<GossipsubEvent> for UniversalConnectivityMessage {
             let topic = message.topic.clone();
 
             match topic.as_str() {
-                GOSSIPSUB_CHAT_TOPIC => Ok(Self::Chat {
+                t if t == chat_topic_name => Ok(Self::Chat {
                     propagation_source,
                     from,
                     data,
