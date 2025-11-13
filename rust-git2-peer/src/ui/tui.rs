@@ -45,6 +45,15 @@ pub struct Tui {
     topic: Option<String>,
     // the git commit message if the topic is a git commit hash
     git_commit_message: Option<String>,
+    // the current display mode
+    display_mode: DisplayMode,
+}
+
+/// Enum to control what is displayed in the main view
+enum DisplayMode {
+    Chat,
+    Log,
+    GitDiff,
 }
 
 impl Tui {
@@ -69,6 +78,7 @@ impl Tui {
             shutdown,
             topic,
             git_commit_message,
+            display_mode: DisplayMode::Chat,
         });
 
         (ui, to_ui, from_ui)
@@ -79,9 +89,6 @@ impl Tui {
 impl Ui for Tui {
     /// Run the UI
     async fn run(&mut self) -> anyhow::Result<()> {
-        // the currently selected tab
-        let mut selected_tab = 0;
-
         // TUI setup
         enable_raw_mode()?;
         let mut stdout = io::stdout();
@@ -94,6 +101,9 @@ impl Ui for Tui {
 
         // System Events Widget
         let mut system_events_widget = LinesWidget::new("System Events", 100);
+
+        // Git Diff Widget
+        let mut git_diff_widget = LinesWidget::new("Git Diff", 500);
 
         // Chat Widget
         let mut chat_widget = ChatWidget::new(&self.me, self.topic.clone(), self.git_commit_message.clone());
@@ -152,19 +162,26 @@ impl Ui for Tui {
             }
 
             // Draw the UI
-            terminal.draw(|f| match selected_tab {
-                0 => f.render_widget(&mut chat_widget, f.area()),
-                1 => {
-                    let log_layout = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-                        .split(f.area());
-                    f.render_widget(&mut log_widget, log_layout[0]);
-                    f.render_widget(&mut system_events_widget, log_layout[1]);
+            terminal.draw(|f| {
+                match self.display_mode {
+                    DisplayMode::Chat => f.render_widget(&mut chat_widget, f.area()),
+                    DisplayMode::Log => {
+                        let log_layout = Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                            .split(f.area());
+                        f.render_widget(&mut log_widget, log_layout[0]);
+                        f.render_widget(&mut system_events_widget, log_layout[1]);
+                    }
+                    DisplayMode::GitDiff => {
+                        let diff_layout = Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([Constraint::Percentage(100)].as_ref())
+                            .split(f.area());
+                        f.render_widget(&mut git_diff_widget, diff_layout[0]);
+                    }
                 }
-                _ => {}
             })?;
-
             // Handle input events
             if event::poll(Duration::from_millis(18))? {
                 match event::read()? {
@@ -204,19 +221,34 @@ impl Ui for Tui {
                         // Handle all other key events
                         _ => match key.code {
                             KeyCode::Tab => {
-                                selected_tab = (selected_tab + 1) % 2;
+                                self.display_mode = match self.display_mode {
+                                    DisplayMode::Chat => DisplayMode::Log,
+                                    DisplayMode::Log => DisplayMode::Chat,
+                                    DisplayMode::GitDiff => DisplayMode::Chat, // Tab from diff goes to chat
+                                };
                             }
-                            KeyCode::Esc if selected_tab == 0 => {
-                                chat_widget.mode = InputMode::Chat;
-                                chat_widget.input.clear();
+                            KeyCode::Esc => {
+                                match &mut chat_widget.mode {
+                                    InputMode::Chat => {
+                                        if matches!(self.display_mode, DisplayMode::GitDiff) {
+                                            self.display_mode = DisplayMode::Chat;
+                                        }
+                                    }
+                                    _ => {
+                                        chat_widget.mode = InputMode::Chat;
+                                        chat_widget.input.clear();
+                                    }
+                                }
                             }
-                            KeyCode::Char(c) if selected_tab == 0 => {
-                                chat_widget.input.push(c);
+                            KeyCode::Char(c) if matches!(self.display_mode, DisplayMode::Chat) => {
+                                if chat_widget.input.len() < 256 {
+                                    chat_widget.input.push(c);
+                                }
                             }
-                            KeyCode::Backspace if selected_tab == 0 => {
+                            KeyCode::Backspace if matches!(self.display_mode, DisplayMode::Chat) => {
                                 chat_widget.input.pop();
                             }
-                            KeyCode::Enter if selected_tab == 0 => {
+                            KeyCode::Enter if matches!(self.display_mode, DisplayMode::Chat) => {
                                 let input = chat_widget.input.clone();
                                 if input.starts_with("/") {
                                     let parts: Vec<&str> = input.splitn(2, ' ').collect();
@@ -262,7 +294,8 @@ impl Ui for Tui {
                                                     .output()
                                                     .await?;
                                                 let diff_output = String::from_utf8_lossy(&output.stdout).to_string();
-                                                system_events_widget.add_line(format!("Git Diff:\n{}", diff_output));
+                                                git_diff_widget.add_line(diff_output);
+                                                self.display_mode = DisplayMode::GitDiff;
                                             } else {
                                                 // send the git command to the swarm
                                                 self.to_peer
@@ -284,14 +317,16 @@ impl Ui for Tui {
                             _ => {}
                         },
                     },
-                    Event::Mouse(event) => match selected_tab {
-                        0 => {
+                    Event::Mouse(event) => match self.display_mode {
+                        DisplayMode::Chat => {
                             let _ = chat_widget.mouse_event(event);
                         }
-                        1 => {
+                        DisplayMode::Log => {
                             let _ = log_widget.mouse_event(event) || system_events_widget.mouse_event(event);
                         }
-                        _ => {}
+                        DisplayMode::GitDiff => {
+                            let _ = git_diff_widget.mouse_event(event);
+                        }
                     },
                     _ => {}
                 }
