@@ -24,6 +24,10 @@ pub enum Message {
     Event(String),
     /// Send a git command
     GitCommand(String),
+    /// Request git remotes
+    GitRemotesRequest,
+    /// Response with git remotes
+    GitRemotesResponse(Vec<String>),
     /// Send a command
     Command(String),
 }

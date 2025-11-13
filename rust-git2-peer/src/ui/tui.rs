@@ -155,8 +155,17 @@ impl Ui for Tui {
                     Message::GitCommand(cmd) => {
                         system_events_widget.add_line(format!("Received git command: {}", cmd));
                     }
+                    Message::GitRemotesRequest => {
+                        system_events_widget.add_line("Received Git Remotes Request (should not happen in UI)");
+                    }
                     Message::Command(cmd) => {
                         system_events_widget.add_line(format!("Received command: {}", cmd));
+                    }
+                    Message::GitRemotesResponse(remotes) => {
+                        system_events_widget.add_line("Git Remotes:");
+                        for remote in remotes {
+                            system_events_widget.add_line(format!("  - {}", remote));
+                        }
                     }
                 }
             }
@@ -296,6 +305,8 @@ impl Ui for Tui {
                                                 let diff_output = String::from_utf8_lossy(&output.stdout).to_string();
                                                 git_diff_widget.add_line(diff_output);
                                                 self.display_mode = DisplayMode::GitDiff;
+                                            } else if input == "remotes" {
+                                                self.to_peer.send(Message::GitRemotesRequest).await?;
                                             } else {
                                                 // send the git command to the swarm
                                                 self.to_peer

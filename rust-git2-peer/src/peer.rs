@@ -582,6 +582,16 @@ impl Peer {
                             self.msg("No peers to send git command to").await?;
                         }
                     }
+                    Message::GitRemotesRequest => {
+                        match crate::git_exchange::get_git_remotes() {
+                            Ok(remotes) => {
+                                self.to_ui.send(Message::GitRemotesResponse(remotes)).await?;
+                            }
+                            Err(e) => {
+                                self.to_ui.send(Message::Event(format!("Failed to get git remotes: {}", e))).await?;
+                            }
+                        }
+                    }
                     Message::AllPeers { .. } => {
                         error!("all peers received");
                         let peers = self
@@ -1115,6 +1125,12 @@ impl Peer {
                                                                 Err(e) => GitResponse::Error(format!("Failed to open repository at {:?}: {}", repo_path, e)),
                                                             }
                                                         },
+                                                        GitRequest::ListRemotes => {
+                                                            match crate::git_exchange::get_git_remotes() {
+                                                                Ok(remotes) => GitResponse::Remotes(remotes),
+                                                                Err(e) => GitResponse::Error(format!("Failed to get git remotes: {}", e)),
+                                                            }
+                                                        },
                                                     };
                                                     if let Err(e) = self.swarm.behaviour_mut().request_response.send_response(channel, response) {
                                                         error!("Failed to send GitResponse: {:?}", e);
@@ -1133,6 +1149,13 @@ impl Peer {
                                                             output
                                                         }
                                                         GitResponse::Status(status) => format!("Git status:\n{}", status),
+                                                        GitResponse::Remotes(remotes) => {
+                                                            let mut output = String::from("Git Remotes:\n");
+                                                            for remote in remotes {
+                                                                output.push_str(&format!("  - {}\n", remote));
+                                                            }
+                                                            output
+                                                        }
                                                         GitResponse::Data(_) => "Received raw git data".to_string(),
                                                     };
                                                     if let Err(e) = self.to_ui.send(Message::Event(msg)).await {

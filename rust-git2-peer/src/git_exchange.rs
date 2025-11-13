@@ -26,6 +26,8 @@ pub enum GitRequest {
     LsRemoteHeads(String),
     /// Request to get repository status (e.g., `git status`).
     Status(String),
+    /// Request to list all configured remotes.
+    ListRemotes,
 }
 
 /// Represents possible Git responses that can be sent between peers.
@@ -39,6 +41,8 @@ pub enum GitResponse {
     LsRemote(Vec<(String, String)>), // (ref, oid)
     /// Response for `Status`, containing the status string.
     Status(String),
+    /// Response for `ListRemotes`, containing a list of remote names.
+    Remotes(Vec<String>),
     /// Bytes data, useful for packfiles during fetch/push.
     Data(Vec<u8>),
 }
@@ -172,6 +176,14 @@ where
     let mut buf = vec![0; len];
     socket.read_exact(&mut buf).await?;
     Ok(buf)
+}
+
+/// Retrieves a list of remote names from the current git repository.
+pub fn get_git_remotes() -> anyhow::Result<Vec<String>> {
+    let repo = git2::Repository::open(".")?;
+    let remotes = repo.remotes()?;
+    let remote_names: Vec<String> = remotes.iter().flatten().map(|s| s.to_string()).collect();
+    Ok(remote_names)
 }
 
 // --- END Utility functions ---
