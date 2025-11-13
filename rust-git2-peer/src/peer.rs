@@ -470,18 +470,41 @@ impl Peer {
         }
 
         // initiate a bootstrap of kademlia if it is enabled
-        if let Some(ref mut kad) = self.swarm.behaviour_mut().kademlia.as_mut() {
-            // parse the bootstrap multiaddrs
-            let bootstrappers: Vec<Multiaddr> = IPFS_BOOTSTRAP_NODES
-                .iter()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            for addr in bootstrappers.iter() {
-                if let Some((multiaddr, peerid)) = split_peer_id(addr.clone()) {
-                    kad.add_address(&peerid, multiaddr);
-                }
-            }
+        let mut bootstrap_peers_to_add_to_kad = Vec::<(PeerId, Multiaddr)>::new();
+        let mut bootstrap_addrs_to_dial = Vec::<Multiaddr>::new();
 
+        let bootstrappers: Vec<Multiaddr> = IPFS_BOOTSTRAP_NODES
+            .iter()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+
+        for addr in bootstrappers.iter() {
+            if let Some((multiaddr, peerid)) = split_peer_id(addr.clone()) {
+                bootstrap_peers_to_add_to_kad.push((peerid, multiaddr));
+            }
+            bootstrap_addrs_to_dial.push(addr.clone());
+        }
+
+        if let Some(ref mut kad) = self.swarm.behaviour_mut().kademlia.as_mut() {
+            for (peerid, multiaddr) in bootstrap_peers_to_add_to_kad {
+                kad.add_address(&peerid, multiaddr);
+            }
+        }
+
+        // Dial bootstrap nodes to ensure initial connections
+        for addr in bootstrap_addrs_to_dial {
+            debug!("Attempting to dial bootstrap node: {}", addr);
+            if let Err(e) = self.swarm.dial(addr.clone()) {
+                self.msg(format!("Failed to dial bootstrap node {addr}: {e}")).await?;
+                debug!("Failed to dial bootstrap node {}: {}", addr, e);
+            }
+            else {
+                self.msg(format!("Dialed bootstrap node {addr}")).await?;
+                debug!("Successfully dialed bootstrap node: {}", addr);
+            }
+        }
+
+        if let Some(ref mut kad) = self.swarm.behaviour_mut().kademlia.as_mut() {
             // start the bootstrap process
             match kad.bootstrap() {
                 Ok(query_id) => {
@@ -497,9 +520,7 @@ impl Peer {
                     .await?;
                 }
             }
-        }
-
-        // Initialize the gossipsub topics, the hashes are the same as the topic names
+        }        // Initialize the gossipsub topics, the hashes are the same as the topic names
         let chat_topic = GossipsubIdentTopic::new(self.current_chat_topic.clone());
         let file_topic = GossipsubIdentTopic::new(GOSSIPSUB_CHAT_FILE_TOPIC);
         let peer_discovery = GossipsubIdentTopic::new(GOSSIPSUB_PEER_DISCOVERY);
